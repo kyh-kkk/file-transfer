@@ -3,134 +3,91 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <!-- 下面这行可以改网页标题 -->
-  <title>我的私人传文件</title>
+  <title>私人文件传输</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      font-family: "Microsoft Yahei", sans-serif;
-    }
-    body {
-      max-width: 600px;
-      margin: 40px auto;
-      padding: 20px;
-      background: #f0f4f8; /* 背景色，可改 */
-    }
-    .box {
-      background: #fff;
-      padding: 24px;
-      border-radius: 12px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-      color: #222; /* 标题颜色 */
-    }
-    textarea, input {
-      width: 100%;
-      padding: 10px;
-      margin: 8px 0;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      margin: 6px 0;
-      background: #007bff; /* 按钮颜色 */
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
-    .tip {
-      margin-top: 15px;
-      font-size: 14px;
-      color: #666;
-      line-height: 1.6;
-    }
+    * {margin:0;padding:0;box-sizing:border-box;font-family:Microsoft Yahei}
+    body{max-width:600px;margin:40px auto;padding:20px;background:#f0f4f8}
+    .box{background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.1)}
+    h1{text-align:center;margin-bottom:20px;color:#222}
+    textarea{width:100%;padding:10px;margin:8px 0;border:1px solid #ccc;border-radius:6px;min-height:80px}
+    button{width:100%;padding:12px;margin:6px 0;background:#007bff;color:white;border:none;border-radius:6px;font-size:16px;cursor:pointer}
+    button:disabled{background:#aaa}
+    .tip{margin-top:15px;font-size:14px;color:#666;line-height:1.6}
+    #status{text-align:center;margin:10px 0;font-size:16px}
   </style>
 </head>
 <body>
   <div class="box">
     <h1>📤 私人文件传输</h1>
-
     <div id="status">等待配对...</div>
 
-    <textarea id="signalLocal" placeholder="我方信号（复制发给对方）" rows="4"></textarea>
-    <textarea id="signalRemote" placeholder="粘贴对方发来的信号" rows="4"></textarea>
+    <textarea id="localSig" placeholder="复制这里发给对方"></textarea>
+    <textarea id="remoteSig" placeholder="粘贴对方发来的信号"></textarea>
 
-    <button id="btnCreate" onclick="create()">我是发送方，创建连接</button>
-    <button id="btnJoin" onclick="join()">我是接收方，加入连接</button>
-    <button id="btnSend" disabled onclick="sendFile()">选择文件发送</button>
+    <button onclick="create()">我是发送方 → 创建连接</button>
+    <button onclick="join()">我是接收方 → 加入连接</button>
+    <button id="sendBtn" disabled onclick="sendFile()">选择文件发送</button>
 
     <div class="tip">
-      1. 发送方点【创建连接】，复制上面信号发给对方<br>
-      2. 接收方粘贴信号，点【加入连接】，复制自己信号发回去<br>
-      3. 连接成功后即可传文件，点对点直传
+      严格顺序：<br>
+      1.发送方创建→复制信号发给接收方<br>
+      2.接收方粘贴→加入→复制自己信号发回<br>
+      3.发送方粘贴接收方信号 → 配对成功
     </div>
   </div>
 
-<!-- 用成熟的P2P库，不用自己写复杂逻辑 -->
 <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
 <script>
 let peer;
 const status = document.getElementById('status');
-const sigLocal = document.getElementById('signalLocal');
-const sigRemote = document.getElementById('signalRemote');
-const btnSend = document.getElementById('btnSend');
+const localSig = document.getElementById('localSig');
+const remoteSig = document.getElementById('remoteSig');
+const sendBtn = document.getElementById('sendBtn');
 
-// 发送方创建连接
-function create() {
-  peer = new SimplePeer({ initiator: true, trickle: false });
-  bindPeer();
+// 发送方
+function create(){
+  peer = new SimplePeer({initiator:true,trickle:false});
+  bind();
+}
+// 接收方
+function join(){
+  peer = new SimplePeer({initiator:false,trickle:false});
+  bind();
+  peer.signal(JSON.parse(remoteSig.value));
 }
 
-// 接收方加入
-function join() {
-  peer = new SimplePeer({ initiator: false, trickle: false });
-  bindPeer();
-  peer.signal(JSON.parse(sigRemote.value));
-}
-
-// 绑定事件
-function bindPeer() {
-  peer.on('signal', s => sigLocal.value = JSON.stringify(s));
-  peer.on('connect', () => {
-    status.innerText = '✅ 连接成功，可以传文件！';
-    btnSend.disabled = false;
+function bind(){
+  // 自己的信号显示在上面框
+  peer.on('signal',s=>localSig.value=JSON.stringify(s));
+  // 收到对方信号立刻配对（修复BUG！）
+  remoteSig.oninput = ()=>{
+    try{peer.signal(JSON.parse(remoteSig.value))}catch(e){}
+  };
+  // 连接成功
+  peer.on('connect',()=>{
+    status.innerText='✅ 配对成功！';
+    sendBtn.disabled=false;
   });
-  peer.on('data', data => {
-    const blob = new Blob([data]);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '接收文件';
+  // 接收文件
+  peer.on('data',data=>{
+    const blob=new Blob([data]);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='接收文件';
     a.click();
-    status.innerText = '✅ 文件接收完成';
+    status.innerText='✅ 文件接收完成';
   });
 }
 
 // 发送文件
-function sendFile() {
-  const i = document.createElement('input');
-  i.type = 'file';
-  i.onchange = e => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      peer.send(reader.result);
-      status.innerText = '✅ 文件已发送';
-    };
-    reader.readAsArrayBuffer(file);
+function sendFile(){
+  const i=document.createElement('input');
+  i.type='file';
+  i.onchange=e=>{
+    const f=e.target.files[0];
+    const r=new FileReader();
+    r.onload=()=>{peer.send(r.result);status.innerText='✅ 文件已发送'};
+    r.readAsArrayBuffer(f);
   };
   i.click();
 }
