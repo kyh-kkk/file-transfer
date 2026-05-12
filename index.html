@@ -1,83 +1,139 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<title>实时互发消息</title>
-<style>
-  body {
-    max-width: 600px;
-    margin: 20px auto;
-    font-family: Arial;
-    background: #f5f5f5;
-  }
-  #messages {
-    height: 400px;
-    border: 1px solid #ddd;
-    background: white;
-    padding: 10px;
-    overflow-y: auto;
-    border-radius: 8px;
-    margin-bottom: 10px;
-  }
-  #input {
-    width: 70%;
-    padding: 10px;
-    font-size: 16px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-  }
-  button {
-    width: 25%;
-    padding: 10px;
-    font-size: 16px;
-    background: #009688;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <!-- 下面这行可以改网页标题 -->
+  <title>我的私人传文件</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "Microsoft Yahei", sans-serif;
+    }
+    body {
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f0f4f8; /* 背景色，可改 */
+    }
+    .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #222; /* 标题颜色 */
+    }
+    textarea, input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0;
+      background: #007bff; /* 按钮颜色 */
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    .tip {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #666;
+      line-height: 1.6;
+    }
+  </style>
 </head>
 <body>
+  <div class="box">
+    <h1>📤 私人文件传输</h1>
 
-<div id="messages"></div>
-<input id="input" placeholder="输入消息...">
-<button onclick="send()">发送</button>
+    <div id="status">等待配对...</div>
 
+    <textarea id="signalLocal" placeholder="我方信号（复制发给对方）" rows="4"></textarea>
+    <textarea id="signalRemote" placeholder="粘贴对方发来的信号" rows="4"></textarea>
+
+    <button id="btnCreate" onclick="create()">我是发送方，创建连接</button>
+    <button id="btnJoin" onclick="join()">我是接收方，加入连接</button>
+    <button id="btnSend" disabled onclick="sendFile()">选择文件发送</button>
+
+    <div class="tip">
+      1. 发送方点【创建连接】，复制上面信号发给对方<br>
+      2. 接收方粘贴信号，点【加入连接】，复制自己信号发回去<br>
+      3. 连接成功后即可传文件，点对点直传
+    </div>
+  </div>
+
+<!-- 用成熟的P2P库，不用自己写复杂逻辑 -->
+<script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
 <script>
-  // 免费公共广播服务，无需KEY，无需注册
-  // 同一个房间，所有人实时互通
-  const room = "my-private-room-123";
-  const ws = new WebSocket(`wss://ws.zeromq.io/broadcast/${room}`);
+let peer;
+const status = document.getElementById('status');
+const sigLocal = document.getElementById('signalLocal');
+const sigRemote = document.getElementById('signalRemote');
+const btnSend = document.getElementById('btnSend');
 
-  const messages = document.getElementById("messages");
-  const input = document.getElementById("input");
+// 发送方创建连接
+function create() {
+  peer = new SimplePeer({ initiator: true, trickle: false });
+  bindPeer();
+}
 
-  // 收到消息立刻显示
-  ws.onmessage = (e) => {
-    const div = document.createElement("div");
-    div.style.margin = "5px 0";
-    div.style.padding = "6px 10px";
-    div.style.background = "#e0f7fa";
-    div.style.borderRadius = "5px";
-    div.textContent = e.data;
-    messages.appendChild(div);
-    messages.scrollTop = messages.scrollHeight;
-  };
+// 接收方加入
+function join() {
+  peer = new SimplePeer({ initiator: false, trickle: false });
+  bindPeer();
+  peer.signal(JSON.parse(sigRemote.value));
+}
 
-  // 发送消息
-  function send() {
-    const text = input.value.trim();
-    if (!text) return;
-    ws.send(text);
-    input.value = "";
-  }
-
-  // 回车发送
-  input.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") send();
+// 绑定事件
+function bindPeer() {
+  peer.on('signal', s => sigLocal.value = JSON.stringify(s));
+  peer.on('connect', () => {
+    status.innerText = '✅ 连接成功，可以传文件！';
+    btnSend.disabled = false;
   });
-</script>
+  peer.on('data', data => {
+    const blob = new Blob([data]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '接收文件';
+    a.click();
+    status.innerText = '✅ 文件接收完成';
+  });
+}
 
+// 发送文件
+function sendFile() {
+  const i = document.createElement('input');
+  i.type = 'file';
+  i.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      peer.send(reader.result);
+      status.innerText = '✅ 文件已发送';
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  i.click();
+}
+</script>
 </body>
 </html>
