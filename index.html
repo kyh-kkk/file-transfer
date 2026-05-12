@@ -1,95 +1,126 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>私人文件传输</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文件快传</title>
   <style>
-    * {margin:0;padding:0;box-sizing:border-box;font-family:Microsoft Yahei}
-    body{max-width:600px;margin:40px auto;padding:20px;background:#f0f4f8}
-    .box{background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.1)}
-    h1{text-align:center;margin-bottom:20px;color:#222}
-    textarea{width:100%;padding:10px;margin:8px 0;border:1px solid #ccc;border-radius:6px;min-height:80px}
-    button{width:100%;padding:12px;margin:6px 0;background:#007bff;color:white;border:none;border-radius:6px;font-size:16px;cursor:pointer}
-    button:disabled{background:#aaa}
-    .tip{margin-top:15px;font-size:14px;color:#666;line-height:1.6}
-    #status{text-align:center;margin:10px 0;font-size:16px}
+    *{margin:0;padding:0;box-sizing:border-box;font-family: system-ui, sans-serif;}
+    body{max-width:500px;margin:30px auto;padding:20px;background:#f5f7fa;}
+    .card{background:white;padding:25px;border-radius:15px;box-shadow:0 2px 10px #00000010;}
+    h1{text-align:center;margin-bottom:20px;color:#333;}
+    .status{text-align:center;padding:12px;border-radius:8px;margin:15px 0;background:#f8f9fa;color:#666;font-weight:bold;}
+    textarea{width:100%;height:90px;padding:10px;margin:8px 0;border:1px solid #ddd;border-radius:8px;resize:none;}
+    button{width:100%;padding:12px;margin:6px 0;border:none;border-radius:8px;background:#007bff;color:white;font-size:16px;cursor:pointer;}
+    button:disabled{background:#ccc;cursor:not-allowed;}
+    .tips{font-size:13px;color:#666;margin-top:15px;line-height:1.5;}
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>📤 私人文件传输</h1>
-    <div id="status">等待配对...</div>
+<div class="card">
+  <h1>📤 点对点文件传输</h1>
+  <div id="status">等待配对...</div>
 
-    <textarea id="localSig" placeholder="复制这里发给对方"></textarea>
-    <textarea id="remoteSig" placeholder="粘贴对方发来的信号"></textarea>
+  <textarea id="mySignal" placeholder="我的信号（复制发给对方）"></textarea>
+  <textarea id="friendSignal" placeholder="粘贴对方的信号"></textarea>
 
-    <button onclick="create()">我是发送方 → 创建连接</button>
-    <button onclick="join()">我是接收方 → 加入连接</button>
-    <button id="sendBtn" disabled onclick="sendFile()">选择文件发送</button>
+  <button onclick="createPeer()">1. 我是发送方（创建连接）</button>
+  <button onclick="connectPeer()">2. 我是接收方（加入连接）</button>
+  <button id="sendFileBtn" disabled onclick="selectFile()">3. 选择文件发送</button>
 
-    <div class="tip">
-      严格顺序：<br>
-      1.发送方创建→复制信号发给接收方<br>
-      2.接收方粘贴→加入→复制自己信号发回<br>
-      3.发送方粘贴接收方信号 → 配对成功
-    </div>
+  <div class="tips">
+    1. 发送方创建信号 → 发给接收方<br>
+    2. 接收方粘贴信号加入 → 发回信号<br>
+    3. 发送方粘贴信号 → 显示【已响应】即成功
   </div>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simplepeer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simple-peer.min.js"></script>
 <script>
 let peer;
-const status = document.getElementById('status');
-const localSig = document.getElementById('localSig');
-const remoteSig = document.getElementById('remoteSig');
-const sendBtn = document.getElementById('sendBtn');
+const statusText = document.getElementById('status');
+const mySignal = document.getElementById('mySignal');
+const friendSignal = document.getElementById('friendSignal');
+const sendBtn = document.getElementById('sendFileBtn');
 
-// 发送方
-function create(){
-  peer = new SimplePeer({initiator:true,trickle:false});
-  bind();
-}
-// 接收方
-function join(){
-  peer = new SimplePeer({initiator:false,trickle:false});
-  bind();
-  peer.signal(JSON.parse(remoteSig.value));
+// 配置公共服务器，大幅提升连接成功率
+const peerConfig = {
+  initiator: false,
+  trickle: false,
+  config: { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] }
+};
+
+// 发送方：创建连接
+function createPeer() {
+  statusText.textContent = "生成信号中...";
+  peer = new SimplePeer({ ...peerConfig, initiator: true });
+  bindEvents();
 }
 
-function bind(){
-  // 自己的信号显示在上面框
-  peer.on('signal',s=>localSig.value=JSON.stringify(s));
-  // 收到对方信号立刻配对（修复BUG！）
-  remoteSig.oninput = ()=>{
-    try{peer.signal(JSON.parse(remoteSig.value))}catch(e){}
-  };
+// 接收方：加入连接
+function connectPeer() {
+  if(!friendSignal.value) { alert("请先粘贴对方信号！"); return; }
+  statusText.textContent = "正在加入连接...";
+  peer = new SimplePeer({ ...peerConfig, initiator: false });
+  bindEvents();
+  
+  // 接收方绑定对方信号
+  try {
+    peer.signal(JSON.parse(friendSignal.value));
+  } catch (e) {
+    statusText.textContent = "信号格式错误！";
+  }
+}
+
+// 绑定所有事件（修复核心BUG）
+function bindEvents() {
+  // 生成自己的信号
+  peer.on('signal', (signal) => {
+    mySignal.value = JSON.stringify(signal);
+    statusText.textContent = "等待对方响应...";
+  });
+
+  // 监听对方信号输入（粘贴后自动响应）
+  friendSignal.addEventListener('input', () => {
+    if(!peer) return;
+    try {
+      peer.signal(JSON.parse(friendSignal.value));
+      statusText.textContent = "✅ 已响应！"; // 你要的：已响应提示
+    } catch (e) {}
+  });
+
   // 连接成功
-  peer.on('connect',()=>{
-    status.innerText='✅ 配对成功！';
-    sendBtn.disabled=false;
+  peer.on('connect', () => {
+    statusText.textContent = "🎉 配对成功！可以传文件了";
+    sendBtn.disabled = false;
   });
+
   // 接收文件
-  peer.on('data',data=>{
-    const blob=new Blob([data]);
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download='接收文件';
+  peer.on('data', (data) => {
+    const blob = new Blob([data]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "传输文件";
     a.click();
-    status.innerText='✅ 文件接收完成';
+    statusText.textContent = "✅ 文件接收完成";
   });
 }
 
-// 发送文件
-function sendFile(){
-  const i=document.createElement('input');
-  i.type='file';
-  i.onchange=e=>{
-    const f=e.target.files[0];
-    const r=new FileReader();
-    r.onload=()=>{peer.send(r.result);status.innerText='✅ 文件已发送'};
-    r.readAsArrayBuffer(f);
+// 选择并发送文件
+function selectFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      peer.send(reader.result);
+      statusText.textContent = "✅ 文件发送成功";
+    };
+    reader.readAsArrayBuffer(file);
   };
-  i.click();
+  input.click();
 }
 </script>
 </body>
