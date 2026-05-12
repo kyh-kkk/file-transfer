@@ -18,80 +18,96 @@
 </head>
 <body>
 <div class="card">
-  <h1>📤 点对点文件传输</h1>
-  <div id="status">等待配对...</div>
+  <h1>📤 文件快传</h1>
+  <div id="status">等待操作...</div>
 
   <textarea id="mySignal" placeholder="我的信号（复制发给对方）"></textarea>
   <textarea id="friendSignal" placeholder="粘贴对方的信号"></textarea>
 
-  <button onclick="createPeer()">1. 我是发送方（创建连接）</button>
-  <button onclick="connectPeer()">2. 我是接收方（加入连接）</button>
-  <button id="sendFileBtn" disabled onclick="selectFile()">3. 选择文件发送</button>
+  <button onclick="startSend()">1. 我是发送方</button>
+  <button onclick="startReceive()">2. 我是接收方</button>
+  <button id="sendBtn" disabled onclick="sendFile()">3. 发送文件</button>
 
   <div class="tips">
-    1. 发送方创建信号 → 发给接收方<br>
-    2. 接收方粘贴信号加入 → 发回信号<br>
-    3. 发送方粘贴信号 → 显示【已响应】即成功
+    🔥 必看：手机开热点，电脑连手机热点！<br>
+    1. 发送方点按钮 → 复制信号<br>
+    2. 接收方粘贴信号 → 点按钮<br>
+    3. 双方互粘信号 → 显示已响应即可传文件
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.1/simple-peer.min.js"></script>
 <script>
-let peer;
-const statusText = document.getElementById('status');
-const mySignal = document.getElementById('mySignal');
-const friendSignal = document.getElementById('friendSignal');
-const sendBtn = document.getElementById('sendFileBtn');
+let peer = null;
+const status = document.getElementById('status');
+const mySig = document.getElementById('mySignal');
+const friendSig = document.getElementById('friendSignal');
+const sendBtn = document.getElementById('sendBtn');
 
-// 配置公共服务器，大幅提升连接成功率
-const peerConfig = {
-  initiator: false,
+//  GitHub Pages HTTPS 专用稳定配置
+const cfg = {
   trickle: false,
   config: { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] }
 };
 
-// 发送方：创建连接
-function createPeer() {
-  statusText.textContent = "生成信号中...";
-  peer = new SimplePeer({ ...peerConfig, initiator: true });
-  bindEvents();
+// 重置状态
+function reset() {
+  peer = null;
+  mySig.value = '';
+  sendBtn.disabled = true;
 }
 
-// 接收方：加入连接
-function connectPeer() {
-  if(!friendSignal.value) { alert("请先粘贴对方信号！"); return; }
-  statusText.textContent = "正在加入连接...";
-  peer = new SimplePeer({ ...peerConfig, initiator: false });
-  bindEvents();
+// 发送方
+function startSend() {
+  reset();
+  status.textContent = "🔄 生成信号中...";
   
-  // 接收方绑定对方信号
   try {
-    peer.signal(JSON.parse(friendSignal.value));
+    peer = new SimplePeer({ ...cfg, initiator: true });
+    initEvents();
   } catch (e) {
-    statusText.textContent = "信号格式错误！";
+    status.textContent = "❌ 生成失败，刷新重试";
   }
 }
 
-// 绑定所有事件（修复核心BUG）
-function bindEvents() {
-  // 生成自己的信号
-  peer.on('signal', (signal) => {
-    mySignal.value = JSON.stringify(signal);
-    statusText.textContent = "等待对方响应...";
+// 接收方
+function startReceive() {
+  if (!friendSig.value) {
+    alert("请先粘贴对方的信号！");
+    return;
+  }
+  reset();
+  status.textContent = "🔄 连接中...";
+  
+  try {
+    peer = new SimplePeer({ ...cfg, initiator: false });
+    initEvents();
+    peer.signal(JSON.parse(friendSig.value));
+  } catch (e) {
+    status.textContent = "❌ 信号错误";
+  }
+}
+
+// 核心事件（修复所有卡死BUG）
+function initEvents() {
+  // 生成信号成功
+  peer.on('signal', (s) => {
+    mySig.value = JSON.stringify(s);
+    status.textContent = "✅ 信号已生成，请互粘信号";
   });
 
-  // 监听对方信号输入（粘贴后自动响应）
-  friendSignal.addEventListener('input', () => {
-    if(!peer) return;
+  // 粘贴对方信号 → 已响应
+  friendSig.oninput = () => {
+    if (!peer) return;
     try {
-      peer.signal(JSON.parse(friendSignal.value));
-      statusText.textContent = "✅ 已响应！"; // 你要的：已响应提示
+      peer.signal(JSON.parse(friendSig.value));
+      status.textContent = "✅ 已响应！等待连接...";
     } catch (e) {}
-  });
+  };
 
   // 连接成功
   peer.on('connect', () => {
-    statusText.textContent = "🎉 配对成功！可以传文件了";
+    status.textContent = "🎉 连接成功！可以发文件了";
     sendBtn.disabled = false;
   });
 
@@ -100,27 +116,32 @@ function bindEvents() {
     const blob = new Blob([data]);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.download = "文件快传";
     a.href = url;
-    a.download = "传输文件";
     a.click();
-    statusText.textContent = "✅ 文件接收完成";
+    status.textContent = "✅ 文件接收完成";
+  });
+
+  // 错误捕获（不卡死）
+  peer.on('error', (err) => {
+    status.textContent = "❌ 连接错误，刷新重试";
   });
 }
 
-// 选择并发送文件
-function selectFile() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.onchange = (e) => {
+// 发送文件
+function sendFile() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.onchange = (e) => {
     const file = e.target.files[0];
     const reader = new FileReader();
     reader.onload = () => {
       peer.send(reader.result);
-      statusText.textContent = "✅ 文件发送成功";
+      status.textContent = "✅ 文件发送成功";
     };
     reader.readAsArrayBuffer(file);
   };
-  input.click();
+  inp.click();
 }
 </script>
 </body>
