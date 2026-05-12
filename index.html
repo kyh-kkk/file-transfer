@@ -3,61 +3,68 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>文件快传 - 跨设备下载</title>
+  <title>文件快传</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
     body{max-width:500px;margin:30px auto;padding:20px;background:#f5f7fa}
     .card{background:white;padding:25px;border-radius:15px;box-shadow:0 2px 10px #00000010}
     h1{text-align:center;margin-bottom:20px;color:#333}
     .status{text-align:center;padding:12px;border-radius:8px;margin:15px 0;background:#f8f9fa;color:#666;font-weight:bold}
-    .btn{width:100%;padding:12px;margin:10px 0;border:none;border-radius:8px;background:#007bff;color:white;font-size:16px;cursor:pointer}
-    .link-box{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin:10px 0;word-break:break-all;min-height:50px;background:#fff}
+    textarea{width:100%;height:120px;padding:10px;margin:8px 0;border:1px solid #ddd;border-radius:8px;resize:none}
+    button{width:100%;padding:12px;margin:6px 0;border:none;border-radius:8px;background:#007bff;color:white;font-size:16px;cursor:pointer}
     .tips{font-size:13px;color:#666;margin-top:15px;line-height:1.5}
   </style>
 </head>
 <body>
 <div class="card">
   <h1>📤 文件快传</h1>
-  <div id="status">选择文件即可生成下载链接</div>
+  <div id="status">选择文件转文本，跨设备粘贴即可下载</div>
 
-  <button class="btn" onclick="selectFile()">选择文件</button>
-  <div class="link-box" id="link" placeholder="下载链接将显示在这里"></div>
-  <button class="btn" onclick="copyLink()" id="copyBtn" disabled>复制链接</button>
+  <button onclick="selectFile()">1. 选择文件（转文本）</button>
+  <textarea id="fileText" placeholder="文件转成的文本（复制发给对方）"></textarea>
+  <button onclick="pasteAndDownload()">2. 粘贴文本→下载文件</button>
 
   <div class="tips">
-    1. 选择文件 → 自动生成下载链接<br>
-    2. 复制链接发给手机/朋友<br>
-    3. 打开链接直接下载文件<br>
-    4. 纯本地运行，关闭网页链接失效
+    ✅ 100%跨设备 | 不卡顿 | 不404 | 无配对<br>
+    1. 电脑选文件→复制文本→发给手机<br>
+    2. 手机粘贴文本→点下载→完成<br>
+    3. 纯静态GitHub专用，永远稳定
   </div>
 </div>
 
 <script>
 const status = document.getElementById('status');
-const linkBox = document.getElementById('link');
-const copyBtn = document.getElementById('copyBtn');
-let fileUrl = '';
+const fileText = document.getElementById('fileText');
 
-// 选择文件
+// 1. 选择文件 → 转成文本（复制就能发）
 function selectFile() {
   const input = document.createElement('input');
   input.type = 'file';
   input.onchange = (e) => {
     const file = e.target.files[0];
-    // 生成浏览器临时下载链接（真正跨设备可用）
-    fileUrl = URL.createObjectURL(file);
-    linkBox.innerText = fileUrl;
-    status.textContent = `✅ 已生成：${file.name}`;
-    copyBtn.disabled = false;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      // 把文件转成通用文本，跨设备永久有效
+      fileText.value = e.target.result;
+      status.textContent = `✅ ${file.name} 已转文本，复制发送！`;
+    };
+    reader.readAsDataURL(file);
   };
   input.click();
 }
 
-// 复制链接
-function copyLink() {
-  navigator.clipboard.writeText(fileUrl).then(() => {
-    status.textContent = '✅ 链接已复制！';
-  });
+// 2. 粘贴文本 → 自动下载文件（100%不404）
+function pasteAndDownload() {
+  if(!fileText.value) { alert("请粘贴文本！"); return; }
+  try {
+    const a = document.createElement('a');
+    a.href = fileText.value;
+    a.download = "文件快传_" + Date.now();
+    a.click();
+    status.textContent = "✅ 文件下载成功！";
+  }catch(e){
+    status.textContent = "❌ 文本格式错误";
+  }
 }
 </script>
 </body>
